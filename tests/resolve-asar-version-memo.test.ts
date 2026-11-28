@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -97,12 +97,16 @@ describe("app.asar version memo", () => {
 
   it("reads the new version after a same-size, in-place rewrite", () => {
     const resources = path.join(scratch, "resources");
+    const asar = path.join(resources, "app.asar");
     const entry = makeBundle(resources, "4.0.0");
+    // Only the timestamps tell this rewrite apart, and a coarse filesystem clock
+    // (HFS+, FAT, jiffy-rate kernels) may not tick between the two writes: pin the
+    // first archive's mtime so the memo never holds a time the rewrite reproduces.
+    utimesSync(asar, new Date("2020-01-01T00:00:00Z"), new Date("2020-01-01T00:00:00Z"));
     expect(builtinProviderEnv(entry)[APP_VERSION_ENV]).toBe("4.0.0");
 
     // A version bump keeps the byte length (4.0.0 -> 4.0.1): the rewrite is in
     // place and the size does not change, so only the timestamps differ.
-    const asar = path.join(resources, "app.asar");
     const sizeBefore = statSync(asar).size;
     writeAsar(asar, "4.0.1");
     expect(statSync(asar).size).toBe(sizeBefore);
